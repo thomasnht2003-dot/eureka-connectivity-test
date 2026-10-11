@@ -1,0 +1,40 @@
+{
+ "note": "Public URLs only. No project data, no credential. Used by deploy/connectivity_test.py on a throw-away server (Phase 8.2). The two file URLs are the current ones; replace them with the newest if these are old.",
+ "targets": [
+  {
+   "name": "nso_listing",
+   "url": "https://www.nso.gov.vn/bao-cao-tinh-hinh-kinh-te-xa-hoi-hang-thang/",
+   "kind": "html",
+   "min_bytes": 20000,
+   "must_contain": "nso.gov.vn"
+  },
+  {
+   "name": "nso_workbook_first_2KB",
+   "url": "https://www.nso.gov.vn/wp-content/uploads/2026/10/02.-Bieu-thang-9.2026.xlsx",
+   "kind": "xlsx",
+   "range": true,
+   "min_bytes": 1000
+  },
+  {
+   "name": "vbma_listing",
+   "url": "https://vbma.org.vn/vi/reports/weekly",
+   "kind": "html",
+   "min_bytes": 10000
+  },
+  {
+   "name": "vbma_pdf_first_2KB",
+   "url": "https://vbma.org.vn/storage/reports/October2026/28092026 - 02102026 BAO CAO TUAN TTTP.pdf",
+   "kind": "pdf",
+   "range": true,
+   "min_bytes": 1000
+  },
+  {
+   "name": "pmi_provider_health",
+   "url": "https://api.dulieukinhte.com/v1/health",
+   "kind": "json",
+   "min_bytes": 20,
+   "must_contain": "\"ok\":true",
+   "robots": false
+  }
+ ]
+}

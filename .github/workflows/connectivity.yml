@@ -1,0 +1,78 @@
+name: connectivity-test
+
+# Phase 8.2, test 1. Checks whether the data sources answer a GitHub-hosted runner (Azure data-centre addresses).
+# Uses ONLY public URLs from connectivity_targets.json. No project data, no credentials, no secrets in this repository.
+# Manual button + 4 scheduled runs a day. Scheduled runs stop by themselves 4 days after the first run.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 1,7,13,19 * * *"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: connectivity
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Test window (scheduled runs stop 4 days after the first run)
+        id: window
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          expired=false
+          if [ "$EVENT" = "schedule" ]; then
+            first=$(gh api "repos/$REPO/actions/workflows/connectivity.yml/runs?per_page=100" --jq '[.workflow_runs[].created_at] | min' || true)
+            if [ -n "$first" ] && [ "$first" != "null" ]; then
+              age=$(( $(date +%s) - $(date -d "$first" +%s) ))
+              if [ "$age" -gt 345600 ]; then expired=true; fi
+            fi
+          fi
+          echo "expired=$expired" >> "$GITHUB_OUTPUT"
+          if [ "$expired" = "true" ]; then echo "Test window is over; nothing to do. Disable this workflow in the Actions tab." >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - uses: actions/checkout@v4
+        if: steps.window.outputs.expired != 'true'
+
+      - name: Probe the sources (one round)
+        id: probe
+        if: steps.window.outputs.expired != 'true'
+        continue-on-error: true
+        run: python3 connectivity_test.py connectivity_targets.json --rounds 1 --out results.json
+
+      - name: Summary
+        if: steps.window.outputs.expired != 'true'
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          r = json.load(open("results.json"))
+          print("### Connectivity from a GitHub-hosted runner")
+          print("Runner public IP: `%s`  |  host: `%s`  |  started: %s" % (r["environment"].get("public_ip"), r["environment"].get("hostname"), r["environment"].get("started_at")))
+          print()
+          print("| target | verdict | HTTP | latency s | detail |")
+          print("|---|---|---|---|---|")
+          for x in r["rounds"][0]["results"]:
+              print("| %s | %s | %s | %s | %s |" % (x["name"], "OK" if x["ok"] else x["verdict"], x.get("status"), x.get("latency_s", ""), x.get("detail", "")))
+          PY
+
+      - name: Keep the result file (public-URL data only)
+        if: steps.window.outputs.expired != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: connectivity-${{ github.run_id }}
+          path: results.json
+          retention-days: 30
+
+      - name: Fail the run when a source was not reachable
+        if: steps.window.outputs.expired != 'true' && steps.probe.outcome == 'failure'
+        run: |
+          echo "At least one source was not reachable from this runner. See the summary table."
+          exit 1
